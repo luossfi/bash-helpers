@@ -1,0 +1,16 @@
+= Bash Helper Scripts
+
+These scripts are a collection of small bash helpers for multiple purposes.
+
+== Installation
+. Put the scripts you are interested to a location which is exported to `$PATH`.
+  You may change the script names to better suit your purposes.
+. Make the scripts executable: `$ chmod +x <script>`
+
+== Usage
+Each script prints a short help if you do `$ <script> --help`.
+
+== Available Scripts
+git-status-overview::
+Finds all Git repositories located in the working directory and prints a one-line
+status for each of them.
