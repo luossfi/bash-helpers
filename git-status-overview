@@ -1,0 +1,93 @@
+# Git Status Overview - A small bash script to show a status overview
+# of all Git repositories located within a directory.
+# Copyright (C) 2018++ Steff Lukas <steff.lukas@luossfi.org>
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#!/bin/bash
+shopt -s dotglob
+
+getBranchName() {
+	local gitRoot="$1"
+	local repoMetaInfo="$2"
+
+	local branchName="$(grep --perl-regexp --only-matching '(?<=branch\.head )[^\s]+' <<< "$repoMetaInfo")"
+	if [ "$branchName" = '(detached)' ]; then
+		local tagName="$(git -C "$gitRoot" tag --points-at | sed -n '1s/.\+/(\0)/p;q')"
+		if [ ! -z "$tagName" ]; then
+			branchName="$tagName"
+		else
+			local shortRev=$(git -C "$gitRoot" rev-parse --short --quiet HEAD)
+			[[ $? -eq 0 ]] && branchName="($shortRev)" || branchName='(initial)'
+		fi
+	fi
+
+	echo "$branchName"
+}
+
+gitStatus() {
+	local workDir="$1"
+	local gitRoot="$2"
+
+	local relDir="$(realpath --relative-to="$workDir" "$gitRoot")"
+
+	git -C "$gitRoot" fetch --quiet
+
+	local gitStatus="$(git -C "$gitRoot" status --porcelain=v2 --branch --ahead-behind)"
+	local repoMetaInfo="$(sed -n '/^#/p' <<< "$gitStatus")"
+	local dirtyFiles=$(grep -c '^[^#]' <<< "$gitStatus")
+
+	local branchName="$(getBranchName "$gitRoot" "$repoMetaInfo")"
+	local aheadBehind="$(sed -n 's/^# branch\.ab \(.\+\)/[\1]/p' <<< "$repoMetaInfo")"
+	local dirtyFlag="$(if [ $dirtyFiles -gt "0" ];then echo '> '; fi)"
+
+	printf '  %s%s (%s) %s\n' "$dirtyFlag" "$relDir" "$branchName" "$aheadBehind"
+}
+
+iterateGitRepos() {
+	local workDir="$1"
+	shift
+
+	for dir in "$@"; do
+		test -d "$dir" -a \! -L "$dir" || continue
+		if [ -d "$dir/.git" ]; then
+			gitStatus "$workDir" "$dir"
+		else
+			iterateGitRepos "$workDir" "$dir"/*
+		fi
+	done
+}
+
+showHelp() {
+	local scriptName="$(basename "$0")"
+	echo 'Generates an overview of all Git repositories contained in the working directory and their status.'
+	echo ''
+	echo "Usage: $scriptName [PATH] "
+	echo ''
+	echo 'Output Format:'
+	echo '  [> ]REPO_PATH (BRANCH) [[+N -M]]'
+	echo ''
+	echo '  >          dirty flag, i.e. the repository contains uncommitted changes'
+	echo '  REPO_PATH  path to the Git repository, relative to the working directory'
+	echo '  BRANCH     the branch/tag/id the HEAD points to, a value in () means detached'
+	echo '  [+N -M]    ahead behind information, i.e. the current and its remote tracking branch are not up-to-date'
+}
+
+if [ -z "$1" ]; then
+	iterateGitRepos "$PWD" "$PWD"/*
+elif [ "$1" = '--help' ]; then
+	showHelp
+else
+	iterateGitRepos "$1" "$1"/*
+fi
