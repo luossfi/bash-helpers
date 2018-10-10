@@ -3,92 +3,154 @@
 # Git Status Overview - A small bash script to show a status overview
 # of all Git repositories located within a directory.
 # Copyright (C) 2018++ Steff Lukas <steff.lukas@luossfi.org>
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 shopt -s dotglob
 
-getBranchName() {
-	local gitRoot="$1"
-	local repoMetaInfo="$2"
+readonly SCRIPT_NAME="$(basename "$0")"
 
-	local branchName="$(grep --perl-regexp --only-matching '(?<=branch\.head )[^\s]+' <<< "$repoMetaInfo")"
-	if [ "$branchName" = '(detached)' ]; then
-		local tagName="$(git -C "$gitRoot" tag --points-at | sed -n '1s/.\+/(\0)/p;q')"
-		if [ ! -z "$tagName" ]; then
-			branchName="$tagName"
+
+parse_arguments() {
+	local temp
+	temp=$(getopt -o 'h' --long 'help,fetch' -n "$SCRIPT_NAME" -- "$@")
+
+	if [ $? -ne 0 ]; then
+		exit 1
+	fi
+
+	eval set -- "$temp"
+	unset temp
+
+	while true; do
+		case "$1" in
+			'-h'|'--help')
+				readonly show_help=true
+				shift
+				;;
+
+			'--fetch')
+				readonly execute_fetch=true
+				shift
+				;;
+
+			'--')
+				shift
+				break
+				;;
+
+			*)
+				exit 1
+				;;
+		esac
+	done
+
+	test -n "$1" && readonly work_dir="$1" || readonly work_dir="$PWD"
+}
+
+get_branch_name() {
+	local repo_meta_data="$1"
+
+	local branch_name
+	branch_name="$(grep --perl-regexp --only-matching '(?<=branch\.head )[^\s]+' <<< "$repo_meta_data")"
+	if [ "$branch_name" = '(detached)' ]; then
+		local tag_name
+		tag_name="$(git tag --points-at | sed -n '1s/.\+/(\0)/p;q')"
+
+		if [ -n "$tag_name" ]; then
+			branch_name="$tag_name"
 		else
-			local shortRev=$(git -C "$gitRoot" rev-parse --short --quiet HEAD)
-			[[ $? -eq 0 ]] && branchName="($shortRev)" || branchName='(initial)'
+			local short_rev
+			short_rev=$(git rev-parse --short --quiet HEAD)
+			test $? -eq 0 && branch_name="($short_rev)" || branch_name='(initial)'
 		fi
 	fi
 
-	echo "$branchName"
+	echo "$branch_name"
 }
 
-gitStatus() {
-	local workDir="$1"
-	local gitRoot="$2"
+git_status() {
+	local relative_directory
+	relative_directory="$(realpath --relative-to="$work_dir" "$PWD")"
 
-	local relDir="$(realpath --relative-to="$workDir" "$gitRoot")"
+	local git_status
+	git_status="$(git status --porcelain=v2 --branch --ahead-behind)"
 
-	git -C "$gitRoot" fetch --quiet
+	local repo_meta_data
+	repo_meta_data="$(sed -n '/^#/p' <<< "$git_status")"
 
-	local gitStatus="$(git -C "$gitRoot" status --porcelain=v2 --branch --ahead-behind)"
-	local repoMetaInfo="$(sed -n '/^#/p' <<< "$gitStatus")"
-	local dirtyFiles=$(grep -c '^[^#]' <<< "$gitStatus")
+	local dirty_files
+	dirty_files=$(grep -c '^[^#]' <<< "$git_status")
 
-	local branchName="$(getBranchName "$gitRoot" "$repoMetaInfo")"
-	local aheadBehind="$(sed -n 's/^# branch\.ab \(.\+\)/[\1]/p' <<< "$repoMetaInfo")"
-	local dirtyFlag="$(if [ $dirtyFiles -gt "0" ];then echo '> '; fi)"
+	local branch_name
+	branch_name="$(get_branch_name "$repo_meta_data")"
 
-	printf '  %s%s (%s) %s\n' "$dirtyFlag" "$relDir" "$branchName" "$aheadBehind"
+	local ahead_behind
+	ahead_behind="$(sed -n 's/^# branch\.ab \(.\+\)/[\1]/p' <<< "$repo_meta_data")"
+
+	test $dirty_files -gt 0 && local dirty_flag='> '
+
+	printf '  %s%s (%s) %s\n' "$dirty_flag" "$relative_directory" "$branch_name" "$ahead_behind"
 }
 
-iterateGitRepos() {
-	local workDir="$1"
-	shift
-
+iterate_git_repos() {
+	local dir
 	for dir in "$@"; do
-		test -d "$dir" -a \! -L "$dir" || continue
-		if [ -d "$dir/.git" ]; then
-			gitStatus "$workDir" "$dir"
+		test \! -d "$dir" -o -L "$dir" && continue
+
+		cd "$dir"
+
+		if [ -d '.git' ]; then
+			test $execute_fetch && git fetch --quiet
+			git_status
 		else
-			iterateGitRepos "$workDir" "$dir"/*
+			iterate_git_repos "$dir"/*
 		fi
+
+		cd ..
 	done
 }
 
-showHelp() {
-	local scriptName="$(basename "$0")"
+show_help() {
 	echo 'Generates an overview of all Git repositories contained in the working directory and their status.'
 	echo ''
-	echo "Usage: $scriptName [PATH] "
+	echo "Usage: $SCRIPT_NAME [OPTIONS] [PATH] "
+	echo ''
+	echo 'Options:'
+	echo '      --fetch    fetch latest changes from default remote before calculating the status'
+	echo '  -h, --help     display this help and exit'
 	echo ''
 	echo 'Output Format:'
 	echo '  [> ]REPO_PATH (BRANCH) [[+N -M]]'
 	echo ''
-	echo '  >          dirty flag, i.e. the repository contains uncommitted changes'
-	echo '  REPO_PATH  path to the Git repository, relative to the working directory'
-	echo '  BRANCH     the branch/tag/id the HEAD points to, a value in () means detached'
-	echo '  [+N -M]    ahead behind information, i.e. the current and its remote tracking branch are not up-to-date'
+	echo '  >              dirty flag, i.e. the repository contains uncommitted changes'
+	echo '  REPO_PATH      path to the Git repository, relative to the working directory'
+	echo '  BRANCH         the branch/tag/id the HEAD points to, a value in () means detached'
+	echo '  [+N -M]        ahead behind information, i.e. the current and its remote tracking branch are not up-to-date'
 }
 
-if [ -z "$1" ]; then
-	iterateGitRepos "$PWD" "$PWD"/*
-elif [ "$1" = '--help' ]; then
-	showHelp
-else
-	iterateGitRepos "$1" "$1"/*
-fi
+
+main() {
+	parse_arguments "$@"
+
+	if [ $show_help ]; then
+		show_help
+	else
+		iterate_git_repos "$work_dir"/*
+	fi
+}
+
+
+main "$@"
+
