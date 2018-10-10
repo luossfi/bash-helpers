@@ -1,3 +1,5 @@
+#!/bin/bash
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Git Status Overview - A small bash script to show a status overview
 # of all Git repositories located within a directory.
 # Copyright (C) 2018++ Steff Lukas <steff.lukas@luossfi.org>
@@ -15,7 +17,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#!/bin/bash
 shopt -s dotglob
 
 getBranchName() {
