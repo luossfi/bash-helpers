@@ -12,5 +12,7 @@ Each script prints a short help if you do `$ <script> --help`.
 
 == Available Scripts
 git-status-overview::
-Finds all Git repositories located in the working directory and prints a one-line
-status for each of them.
+Finds all Git repositories located in the working directory and prints a one-linestatus for each of them.
+
+terminal-text-color-demo::
+Demonstrates the terminal's text/foreground colors and prints the respective escape sequences.

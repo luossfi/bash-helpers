@@ -1,0 +1,187 @@
+#!/bin/env bash
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Terminal Text/Foreground Color Demo - A small script to demonstrate
+# the terminal's text/foreground colors and respective escape sequences.
+#
+# Copyright (C) 2021++ Steff Lukas <steff.lukas@luossfi.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+readonly SCRIPT_NAME=$(basename "$0")
+readonly reset='\e[0m'
+readonly bold='\e[1m'
+
+function parse_arguments {
+  local temp
+  temp=$(getopt -o 'h' --long 'help' -n "$SCRIPT_NAME" -- "$@")
+
+  if [ $? -ne 0 ]; then
+    exit 1
+  fi
+
+  eval set -- "$temp"
+  unset temp
+
+  while true; do
+    case "$1" in
+      '-h'|'--help')
+        readonly show_help=true
+        shift
+        ;;
+
+      '--')
+        shift
+        break
+        ;;
+
+      *)
+        exit 1
+        ;;
+    esac
+  done
+}
+
+function show_help {
+  echo "Generates a demo of the terminal's text/foreground colors and outputs the respective escape sequences."
+  echo ''
+  echo "Usage: $SCRIPT_NAME"
+}
+
+function named_colors {
+  local names
+  names=(black red green brown blue magenta cyan white)
+  printf '%bnamed colors (1st col) and their 256-colors equivalents(2nd col):%b' $bold $reset
+
+  local i
+  local color
+  local color_256
+  local color_bright
+  local color_256_bright
+
+  for (( i=0; i<8; i+=1 ))
+  do
+    color="\e[3${i}m"
+    color_256="\e[38;5;${i}m"
+    color_bright="\e[9${i}m"
+    color_256_bright="\e[38;5;$((8 + $i))m"
+
+    printf '\n  '
+    printf '%-7s ' "${names[$i]}"
+    printf '%b%s%b' $color $color $reset
+    printf '   '
+    printf '%b%s%b' $color_256 $color_256 $reset
+    printf ' | '
+    printf 'bright %-7s ' "${names[$i]}"
+    printf '%b%s%b' $color_bright $color_bright $reset
+    printf '   '
+    printf '%b%s%b' $color_256_bright $color_256_bright $reset
+  done
+}
+
+
+function color_cube {
+  printf '%b6x6x6 color cube:%b' $bold $reset
+
+  local i
+  local color
+  for (( i=16; i<232; i+=1 ))
+  do
+    # linebreak every 6 elements, modulo must be 4 because start value is 16
+    # 16 % 6 = 4
+    if [ $(($i % 6)) == 4 ]
+    then
+      printf '\n  '
+    else
+      printf ' '
+    fi
+
+    color="\e[38;5;${i}m"
+
+    printf '%b%-12s%b' $color $color $reset
+  done
+}
+
+function grayscale_ramp {
+  printf '%bgrayscale ramp:%b' $bold $reset
+
+  local i
+  local color
+  for (( i=232; i<256; i+=1 ))
+  do
+    color="\e[38;5;${i}m"
+    printf '\n  %b%s%b' $color $color $reset
+  done
+}
+
+function 24_bit_color {
+  local red=$1
+  local green=$2
+  local blue=$3
+
+  local color_name="rgb($red, $green, $blue)"
+  local color="\e[38;2;${red};${green};${blue}m"
+  printf '%-18s => %b%s%b' "$color_name" $color $color $reset
+}
+
+
+function 24_bit_examples {
+  printf '%b24-bit color examples:%b' $bold $reset
+  local color_name
+  local color
+
+  printf '\n  '
+  24_bit_color 0 147 176
+
+  printf '\n  '
+  24_bit_color 21 176 0
+
+  printf '\n  '
+  24_bit_color 176 0 35
+
+  printf '\n  '
+  24_bit_color 123 227 203
+
+  printf '\n  '
+  24_bit_color 255 161 79
+
+  printf '\n  '
+  24_bit_color 200 200 200
+}
+
+function color_demo {
+  printf '\n'
+  named_colors
+  printf '\n\n'
+  color_cube
+  printf '\n\n'
+  grayscale_ramp
+  printf '\n\n'
+  24_bit_examples
+  printf '\n'
+}
+
+function main {
+ parse_arguments "$@"
+
+ if [ $show_help ]
+ then
+   show_help
+ else
+   color_demo
+ fi
+}
+
+main "$@"
+
